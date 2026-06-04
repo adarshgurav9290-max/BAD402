@@ -1,0 +1,205 @@
+import tkinter as tk
+import heapq
+
+# ==========================================
+# 1. STATE SPACE & ENVIRONMENT SETUP
+# ==========================================
+ROWS = 12
+COLS = 16
+CELL_SIZE = 45
+
+# Map specifically designed with "Traps" (U-shaped walls) 
+# to prove Greedy Search flaws vs A* Search perfection.
+# 0 = Path, 1 = Wall
+MAZE = [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0],
+    [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0],
+    [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0],
+    [0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1],
+    [0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+]
+
+class CyberHeistGame:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Cyber Heist - Greedy vs A* Search (BAD402)")
+        self.root.configure(bg="#0b0c10")
+        self.root.resizable(False, False)
+        
+        self.p_pos = (11, 0)
+        self.ai_greedy = {'pos': (1, 6), 'color': '#f39c12', 'name': 'Greedy', 'path': []}
+        self.ai_astar = {'pos': (1, 11), 'color': '#e74c3c', 'name': 'A*', 'path': []}
+        
+        self.is_playing = True
+        self.setup_ui()
+        self.root.bind("<KeyPress>", self.handle_keypress)
+        
+        self.update_ai_paths()
+        self.ai_loop()
+
+    def setup_ui(self):
+        # Educational Dashboard (Module 3 Formulas)
+        self.dashboard = tk.Frame(self.root, bg="#1e1e2e", pady=10)
+        self.dashboard.pack(fill="x")
+        
+        tk.Label(self.dashboard, text="MODULE 3: INFORMED SEARCH COMPARISON", font=("Impact", 20), bg="#1e1e2e", fg="#66fcf1").pack()
+        
+        metrics_text = (
+            "🟠 GREEDY BEST-FIRST SEARCH: f(n) = h(n) [Ignores cost, gets trapped easily]\n"
+            "🔴 A* SEARCH: f(n) = g(n) + h(n) [Calculates optimal cost, perfectly flanks]"
+        )
+        tk.Label(self.dashboard, text=metrics_text, font=("Helvetica", 11, "bold"), bg="#1e1e2e", fg="#c5c6c7").pack()
+
+        # Canvas
+        self.canvas = tk.Canvas(self.root, width=COLS*CELL_SIZE, height=ROWS*CELL_SIZE, bg="#11111b", highlightthickness=0)
+        self.canvas.pack(padx=20, pady=20)
+        
+        self.draw_grid()
+
+    # ==========================================
+    # 2. INFORMED SEARCH ALGORITHMS (MODULE 3)
+    # ==========================================
+    def get_neighbors(self, pos):
+        r, c = pos
+        neighbors = []
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < ROWS and 0 <= nc < COLS and MAZE[nr][nc] == 0:
+                neighbors.append((nr, nc))
+        return neighbors
+
+    def manhattan_distance(self, pos1, pos2):
+        """Heuristic function h(n) used by both agents."""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+    def greedy_search(self, start, target):
+        """f(n) = h(n) -> Sorts priority queue ONLY by heuristic."""
+        pq = [(0, start, [])] # (h_score, current, path)
+        visited = set()
+        
+        while pq:
+            _, current, path = heapq.heappop(pq)
+            if current == target: return path + [current]
+            if current in visited: continue
+            visited.add(current)
+            
+            for neighbor in self.get_neighbors(current):
+                if neighbor not in visited:
+                    # GREEDY LOGIC: f(n) is solely the heuristic h(n)
+                    f = self.manhattan_distance(neighbor, target) 
+                    heapq.heappush(pq, (f, neighbor, path + [current]))
+        return []
+
+    def astar_search(self, start, target):
+        """f(n) = g(n) + h(n) -> Sorts by total path cost + heuristic."""
+        pq = [(0, 0, start, [])] # (f_score, g_score, current, path)
+        visited = set()
+        
+        while pq:
+            _, g, current, path = heapq.heappop(pq)
+            if current == target: return path + [current]
+            if current in visited: continue
+            visited.add(current)
+            
+            for neighbor in self.get_neighbors(current):
+                if neighbor not in visited:
+                    # A* LOGIC: f(n) includes the step cost g(n)
+                    new_g = g + 1 
+                    h = self.manhattan_distance(neighbor, target)
+                    f = new_g + h
+                    heapq.heappush(pq, (f, new_g, neighbor, path + [current]))
+        return []
+
+    # ==========================================
+    # 3. GAME ENGINE & RENDERING
+    # ==========================================
+    def update_ai_paths(self):
+        self.ai_greedy['path'] = self.greedy_search(self.ai_greedy['pos'], self.p_pos)
+        self.ai_astar['path'] = self.astar_search(self.ai_astar['pos'], self.p_pos)
+
+    def handle_keypress(self, event):
+        if not self.is_playing: return
+        key = event.keysym.lower()
+        r, c = self.p_pos
+
+        if (key == "up" or key == "w") and r > 0 and MAZE[r-1][c] == 0: r -= 1
+        elif (key == "down" or key == "s") and r < ROWS-1 and MAZE[r+1][c] == 0: r += 1
+        elif (key == "left" or key == "a") and c > 0 and MAZE[r][c-1] == 0: c -= 1
+        elif (key == "right" or key == "d") and c < COLS-1 and MAZE[r][c+1] == 0: c += 1
+        else: return
+        
+        self.p_pos = (r, c)
+        self.update_ai_paths()
+        self.draw_grid()
+        self.check_game_over()
+
+    def ai_loop(self):
+        if not self.is_playing: return
+        
+        # Move Greedy Agent
+        if len(self.ai_greedy['path']) > 1:
+            self.ai_greedy['pos'] = self.ai_greedy['path'][1]
+            
+        # Move A* Agent
+        if len(self.ai_astar['path']) > 1:
+            self.ai_astar['pos'] = self.ai_astar['path'][1]
+
+        self.update_ai_paths()
+        self.draw_grid()
+        self.check_game_over()
+        
+        if self.is_playing:
+            self.root.after(350, self.ai_loop)
+
+    def check_game_over(self):
+        if self.p_pos == self.ai_greedy['pos']:
+            self.trigger_endgame("GREEDY AGENT")
+        elif self.p_pos == self.ai_astar['pos']:
+            self.trigger_endgame("A* AGENT")
+
+    def trigger_endgame(self, winner):
+        self.is_playing = False
+        self.canvas.create_rectangle(0, 0, COLS*CELL_SIZE, ROWS*CELL_SIZE, fill="#0b0c10", stipple="gray75")
+        self.canvas.create_text(COLS*CELL_SIZE//2, ROWS*CELL_SIZE//2 - 20, text=f"{winner} CAUGHT YOU!", font=("Impact", 45), fill="#ff007f")
+
+    def draw_grid(self):
+        self.canvas.delete("all")
+        
+        # 1. Draw Paths (Visualizing the Search)
+        for agent in [self.ai_greedy, self.ai_astar]:
+            if agent['path']:
+                for pr, pc in agent['path'][1:-1]:
+                    x, y = pc * CELL_SIZE + CELL_SIZE//2, pr * CELL_SIZE + CELL_SIZE//2
+                    self.canvas.create_oval(x-4, y-4, x+4, y+4, fill=agent['color'], outline="")
+
+        # 2. Draw Environment
+        for r in range(ROWS):
+            for c in range(COLS):
+                x1, y1 = c * CELL_SIZE, r * CELL_SIZE
+                x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
+                
+                if MAZE[r][c] == 1: # Draw Cyber-Walls
+                    self.canvas.create_rectangle(x1, y1, x2, y2, fill="#1f2833", outline="#45a29e", width=2)
+                else: # Draw Floor
+                    self.canvas.create_rectangle(x1, y1, x2, y2, fill="#0b0c10", outline="#151b22")
+                    
+        # 3. Draw Entities
+        pr, pc = self.p_pos
+        self.canvas.create_rectangle(pc*CELL_SIZE+5, pr*CELL_SIZE+5, pc*CELL_SIZE+CELL_SIZE-5, pr*CELL_SIZE+CELL_SIZE-5, fill="#a6e3a1")
+        
+        for agent in [self.ai_greedy, self.ai_astar]:
+            r, c = agent['pos']
+            self.canvas.create_oval(c*CELL_SIZE+5, r*CELL_SIZE+5, c*CELL_SIZE+CELL_SIZE-5, r*CELL_SIZE+CELL_SIZE-5, fill=agent['color'])
+            self.canvas.create_text(c*CELL_SIZE+CELL_SIZE//2, r*CELL_SIZE+CELL_SIZE//2, text="🤖", font=("Helvetica", 14))
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = CyberHeistGame(root)
+    root.mainloop()
